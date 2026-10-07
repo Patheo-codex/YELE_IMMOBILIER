@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import logo from './assets/logo.jpg'
-import ManagementPage from './ManagementPage.jsx'
 import './App.css'
 
 const Icon = ({ name, size = 20 }) => {
@@ -43,7 +42,6 @@ const services = [
 function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [currentPage, setCurrentPage] = useState('home')
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', subject: '', message: '' })
   const [contactSent, setContactSent] = useState(false)
 
@@ -53,10 +51,6 @@ function App() {
   const submitContactForm = event => {
     event.preventDefault()
     setContactSent(true)
-  }
-
-  if (currentPage === 'management') {
-    return <ManagementPage onBack={() => setCurrentPage('home')} />
   }
 
   return (
@@ -69,7 +63,6 @@ function App() {
           <a href="#accueil" onClick={() => setMenuOpen(false)}>Accueil</a>
           <a href="#biens" onClick={() => setMenuOpen(false)}>Biens</a>
           <a href="#services" onClick={() => setMenuOpen(false)}>Services</a>
-          <button className="management-link" type="button" onClick={() => { setMenuOpen(false); setCurrentPage('management') }}>Gestion</button>
           <a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a>
         </nav>
         <div className="header-actions">
