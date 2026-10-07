@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import logo from './assets/logo.jpg'
+import ManagementPage from './ManagementPage.jsx'
 import './App.css'
 
 const Icon = ({ name, size = 20 }) => {
@@ -40,31 +42,34 @@ const services = [
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('Vue d’ensemble')
   const [search, setSearch] = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [added, setAdded] = useState(false)
+  const [currentPage, setCurrentPage] = useState('home')
+  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', subject: '', message: '' })
+  const [contactSent, setContactSent] = useState(false)
 
   const filtered = properties.filter(item => `${item.title} ${item.location} ${item.type}`.toLowerCase().includes(search.toLowerCase()))
 
-  const addProperty = (event) => {
+  const updateContactForm = event => setContactForm({ ...contactForm, [event.target.name]: event.target.value })
+  const submitContactForm = event => {
     event.preventDefault()
-    setAdded(true)
-    setTimeout(() => { setAdded(false); setModalOpen(false) }, 900)
+    setContactSent(true)
+  }
+
+  if (currentPage === 'management') {
+    return <ManagementPage onBack={() => setCurrentPage('home')} />
   }
 
   return (
     <div className="app-shell">
       <header className="site-header">
         <a href="#accueil" className="brand" aria-label="YELE IMMOBILIER, accueil">
-          <span className="brand-mark"><span>Y</span></span>
-          <span><strong>YELE</strong><small>IMMOBILIER</small></span>
+          <img className="brand-logo" src={logo} alt="Logo YELE IMMOBILIER" />
         </a>
         <nav className={menuOpen ? 'nav-links open' : 'nav-links'} aria-label="Navigation principale">
           <a href="#accueil" onClick={() => setMenuOpen(false)}>Accueil</a>
           <a href="#biens" onClick={() => setMenuOpen(false)}>Biens</a>
           <a href="#services" onClick={() => setMenuOpen(false)}>Services</a>
-          <a href="#gestion" onClick={() => setMenuOpen(false)}>Gestion</a>
+          <button className="management-link" type="button" onClick={() => { setMenuOpen(false); setCurrentPage('management') }}>Gestion</button>
           <a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a>
         </nav>
         <div className="header-actions">
@@ -89,15 +94,15 @@ function App() {
           </div>
           <div className="hero-card">
             <span>01</span>
-            <div><strong>Est. 2012</strong><small>Expertise locale & nationale</small></div>
+            <div><strong>Est. 2021</strong><small>Expertise locale & nationale</small></div>
           </div>
           <div className="scroll-cue"><span>Découvrir</span><i /></div>
         </section>
 
         <section className="trust-strip">
           <p>Une expertise construite sur</p>
-          <div><strong>+12 ans</strong><span>d’expérience</span></div>
-          <div><strong>180+</strong><span>projets accompagnés</span></div>
+          <div><strong>+5 ans</strong><span>d’expérience</span></div>
+          <div><strong>50+</strong><span>projets accompagnés</span></div>
           <div><strong>98%</strong><span>clients satisfaits</span></div>
           <div><strong>24/7</strong><span>suivi de votre patrimoine</span></div>
         </section>
@@ -135,42 +140,36 @@ function App() {
           </div>
         </section>
 
-        <section className="management-section" id="gestion">
-          <div className="management-copy">
-            <p className="eyebrow"><span /> Espace de gestion</p>
-            <h2>Votre portefeuille,<br /><em> parfaitement structuré.</em></h2>
-            <p>Suivez les mouvements de votre portefeuille, visualisez votre performance et prenez les bonnes décisions en temps réel.</p>
-            <ul><li><Icon name="check" /> Suivi complet des transactions</li><li><Icon name="check" /> Calcul intelligent de votre ROI</li><li><Icon name="check" /> Accès sécurisé à votre données</li></ul>
-            <button className="button button-dark" type="button" onClick={() => setModalOpen(true)}><Icon name="plus" /> Ajouter un projet</button>
-          </div>
-          <div className="dashboard">
-            <div className="dashboard-top"><div><small>Tableau de bord /</small><strong>Vue d’ensemble</strong></div><div className="dashboard-user"><span>YI</span><div><b>Yele Manager</b><small>Administrateur</small></div></div></div>
-            <div className="dashboard-body">
-              <aside><button className={activeTab === 'Vue d’ensemble' ? 'active' : ''} onClick={() => setActiveTab('Vue d’ensemble')}><Icon name="chart" /> Vue d’ensemble</button><button className={activeTab === 'Mes projets' ? 'active' : ''} onClick={() => setActiveTab('Mes projets')}><Icon name="building" /> Mes projets</button><button className={activeTab === 'Clients' ? 'active' : ''} onClick={() => setActiveTab('Clients')}><Icon name="users" /> Clients</button><button className={activeTab === 'Finances' ? 'active' : ''} onClick={() => setActiveTab('Finances')}><Icon name="dollar" /> Finances</button></aside>
-              <div className="dashboard-content">
-                <div className="dashboard-title"><div><p>Bonjour, Yeled</p><h3>{activeTab}</h3></div><button><Icon name="bell" /> <i /></button></div>
-                <div className="metric-row"><div><small>Valeur du portefeuille</small><strong>DZD 84,2M</strong><span>↗ 8,4% ce mois</span></div><div><small>Projets actifs</small><strong>24</strong><span>+3 cette semaine</span></div><div><small>Transactions</small><strong>18</strong><span>6 en attente</span></div></div>
-                <div className="chart-card"><div className="chart-head"><div><small>Évolution du portefeuille</small><strong>+18,4%</strong></div><span>2026</span></div><div className="chart-bars"><i style={{height:'32%'}}/><i style={{height:'48%'}}/><i style={{height:'38%'}}/><i style={{height:'62%'}}/><i style={{height:'54%'}}/><i style={{height:'78%'}}/><i style={{height:'92%'}}/></div></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <section className="testimonial-section">
           <p className="eyebrow light"><span /> Témoignage</p>
-          <blockquote>“YeLé nous a permis de vendre notre parc avec une clarté exceptionnelle. Chaque étape était expliquée, chaque risque anticipé.”</blockquote>
-          <div className="author"><span>AM</span><div><strong>Amina Merabet</strong><small>Propriétaire · Alger</small></div></div>
+          <blockquote>“YeLé immobilier ma permis de trouver un bon terrain avec une clarté exceptionnelle.”</blockquote>
+          <div className="author"><span>AM</span><div><strong>Monsieur Ben</strong><small>Propriétaire · Côte d’Ivoire</small></div></div>
         </section>
 
         <section className="contact-section" id="contact">
-          <div><p className="eyebrow"><span /> Notre bureau</p><h2>Prêt à construire<br />votre avenir ?</h2><p>Parlez-nous de votre projet. Nous vous répondrons sous 24 heures.</p></div>
-          <div className="contact-grid"><a href="tel:+2250757279305"><Icon name="phone" /><span><small>Appelez-nous</small><strong>+225 0757279305</strong></span></a><a href="mailto:contact@yeleimmobilier.dz"><Icon name="mail" /><span><small>Écrivez-nous</small><strong>contact@yeleimmobilier.dz</strong></span></a><div><Icon name="location" /><span><small>Nous nous trouvons</small><strong>Abidjan, Côte d’Ivoire</strong></span></div></div>
+          <div className="contact-intro"><p className="eyebrow"><span /> Notre bureau</p><h2>Prêt à construire<br />votre avenir ?</h2><p>Parlez-nous de votre projet. Nous vous répondrons sous 24 heures.</p>
+            <div className="contact-details">
+              <a href="tel:+2250757279305"><Icon name="phone" /><span><small>Appelez-nous</small><strong>+225 0757279305</strong></span></a>
+              <a href="mailto:contact@yeleimmobilier.dz"><Icon name="mail" /><span><small>Écrivez-nous</small><strong>contact@yeleimmobilier.dz</strong></span></a>
+              <div><Icon name="location" /><span><small>Nous nous trouvons</small><strong>Abidjan, Côte d’Ivoire</strong></span></div>
+            </div>
+          </div>
+          <div className="contact-form-card">
+            {contactSent ? (
+              <div className="contact-success" role="status"><span><Icon name="check" size={28} /></span><h3>Votre demande est enregistrée.</h3><p>Merci, {contactForm.name}. Nous vous contacterons bientôt pour répondre à votre projet.</p><button className="button button-dark" type="button" onClick={() => { setContactSent(false); setContactForm({ name: '', email: '', phone: '', subject: '', message: '' }) }}>Envoyer une autre demande</button></div>
+            ) : (
+              <form className="contact-form" onSubmit={submitContactForm}>
+                <div className="form-row"><label>Nom complet<input type="text" name="name" value={contactForm.name} onChange={updateContactForm} placeholder="Votre nom" required /></label><label>Adresse e-mail<input type="email" name="email" value={contactForm.email} onChange={updateContactForm} placeholder="vous@email.dz" required /></label></div>
+                <div className="form-row"><label>Numéro de téléphone<input type="tel" name="phone" value={contactForm.phone} onChange={updateContactForm} placeholder="+225 00 00 00 00" /></label><label>Objet<input type="text" name="subject" value={contactForm.subject} onChange={updateContactForm} placeholder="Ex. Achat d’un bien" required /></label></div>
+                <label>Votre message<textarea name="message" value={contactForm.message} onChange={updateContactForm} placeholder="Parlez-nous de votre projet..." rows="5" required /></label>
+                <button className="button button-dark form-submit" type="submit">Envoyer ma demande <Icon name="arrow" /></button>
+              </form>
+            )}
+          </div>
         </section>
       </main>
 
-      <footer><a href="#accueil" className="brand footer-brand"><span className="brand-mark"><span>Y</span></span><span><strong>YELE</strong><small>IMMOBILIER</small></span></a><p>© 2026 YELE IMMOBILIER. Construit pour l’avenir.</p><div><a href="#services">Services</a><a href="#biens">Biens</a><a href="#contact">Contact</a></div></footer>
-
-      {modalOpen && <div className="modal-backdrop" onMouseDown={() => setModalOpen(false)}><form className="modal" onSubmit={addProperty} onMouseDown={e => e.stopPropagation()}><button type="button" className="modal-close" onClick={() => setModalOpen(false)}><Icon name="close" /></button><p className="eyebrow"><span /> Nouveau projet</p><h2>Ajoutez un projet</h2><p>Enregistrez une nouvelle opportunité dans votre portefeuille.</p><label>Nom du projet<input required placeholder="Ex. Appartement Résidence" /></label><label>Localisation<input required placeholder="Ville, quartier" /></label><label>Valeur estimée<input required placeholder="DZD 00 000 000" /></label><button className="button button-dark" type="submit">{added ? <><Icon name="check" /> Projet ajouté</> : <><Icon name="plus" /> Enregistrer</>}</button></form></div>}
+      <footer><a href="#accueil" className="brand footer-brand"><img className="brand-logo" src={logo} alt="Logo YELE IMMOBILIER" /></a><p>© 2026 YELE IMMOBILIER. Construit pour l’avenir.</p><div><a href="#services">Services</a><a href="#biens">Biens</a><a href="#contact">Contact</a></div></footer>
     </div>
   )
 }
