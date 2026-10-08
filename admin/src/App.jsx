@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logoYeLE from './assets/YELE.png'
 import './App.css'
 
 const adminAccessCode = import.meta.env.VITE_ADMIN_ACCESS_CODE || 'ADMIN2026'
@@ -41,6 +42,7 @@ function App() {
   const [accessCode, setAccessCode] = useState('')
   const [accessError, setAccessError] = useState('')
   const [activeSection, setActiveSection] = useState('Vue d’ensemble')
+  const [menuOpen, setMenuOpen] = useState(false)
   const [projects, setProjects] = useState(initialProjects)
   const [modalOpen, setModalOpen] = useState(false)
   const [projectForm, setProjectForm] = useState({ name: '', location: '', value: '', owner: '' })
@@ -85,7 +87,7 @@ function App() {
       <main className="admin-login-shell">
         <button className="admin-login-return" type="button" onClick={() => window.location.assign('/')}><Icon name="arrowLeft" /> Retour au site</button>
         <section className="admin-login-panel">
-          <div className="admin-login-brand"><span>YI</span><div><strong>YELE</strong><small>IMMOBILIER</small></div></div>
+          <div className="admin-login-brand"><img src={logoYeLE} alt="YELE IMMOBILIER" /><div><strong>YELE</strong><small>IMMOBILIER</small></div></div>
           <p className="admin-kicker">Espace privé</p>
           <h1>Administration</h1>
           <p className="admin-login-copy">Accédez uniquement à votre espace de gestion YELE IMMOBILIER.</p>
@@ -103,17 +105,18 @@ function App() {
 
   return (
     <main className="admin-dashboard-shell">
-      <aside className="admin-sidebar">
-        <div className="admin-sidebar-brand"><span>YI</span><div><strong>YELE</strong><small>IMMOBILIER</small></div></div>
+      {menuOpen && <button className="admin-mobile-overlay" type="button" aria-label="Fermer le menu" onClick={() => setMenuOpen(false)} />}
+      <aside className={`admin-sidebar ${menuOpen ? 'admin-sidebar-open' : ''}`}>
+        <div className="admin-sidebar-brand"><img src={logoYeLE} alt="YELE IMMOBILIER" /><div><strong>YELE</strong><small>IMMOBILIER</small></div></div>
         <nav aria-label="Navigation administrateur">
-          {navItems.map(item => <button key={item.label} className={activeSection === item.label ? 'active' : ''} onClick={() => setActiveSection(item.label)}><Icon name={item.icon} />{item.label}</button>)}
+          {navItems.map(item => <button key={item.label} className={activeSection === item.label ? 'active' : ''} onClick={() => { setActiveSection(item.label); setMenuOpen(false) }}><Icon name={item.icon} />{item.label}</button>)}
         </nav>
         <div className="admin-sidebar-bottom"><Icon name="settings" /><div><strong>Mode frontend</strong><small>Accès local simulé</small></div></div>
       </aside>
 
       <section className="admin-dashboard">
         <header className="admin-topbar">
-          <div><p>GESTION / {activeSection.toUpperCase()}</p><h1>{activeSection}</h1></div>
+          <div className="admin-topbar-title"><button className="admin-menu-button" type="button" aria-label="Ouvrir le menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span /><span /><span /></button><div><p>GESTION / {activeSection.toUpperCase()}</p><h1>{activeSection}</h1></div></div>
           <div className="admin-topbar-actions"><button className="admin-icon-button" type="button" aria-label="Notifications"><Icon name="bell" /><i /></button><div className="admin-user"><span>YM</span><div><strong>Yele Manager</strong><small>Administrateur</small></div></div><button className="admin-logout" type="button" onClick={logout}>Déconnexion</button></div>
         </header>
 
