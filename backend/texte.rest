@@ -2,3 +2,20 @@ GET http://localhost:5000
 
 ###
 GET http://localhost:5000/service
+
+###
+GET http://localhost:5000/api/properties
+
+###
+POST http://localhost:5000/api/properties
+Content-Type: application/json
+
+{
+	"title": "Appartement lumineux",
+	"description": "Appartement proche des commerces",
+	"price": 12500000,
+	"city": "Abidjan",
+	"type": "Appartement",
+	"operation": "Vente",
+	"image": "https://example.com/bien.jpg"
+}

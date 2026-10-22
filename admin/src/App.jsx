@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import logoYeLE from './assets/YELE.png'
 import './App.css'
 
-const adminAccessCode = import.meta.env.VITE_ADMIN_ACCESS_CODE || 'ADMIN2026'
+const apiUrl = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '')).replace(/\/$/, '')
 
 const Icon = ({ name, size = 20 }) => {
   const paths = {
@@ -19,16 +19,13 @@ const Icon = ({ name, size = 20 }) => {
     arrowLeft: <><path d="m15 18-6-6 6-6" /><path d="M9 12h10" /></>,
     close: <><path d="m6 6 12 12M18 6 6 18" /></>,
     check: <path d="m5 12 4 4L19 6" />,
-    folder: <><path d="M3 6h6l2 2h10v11H3z" /></>
+    folder: <><path d="M3 6h6l2 2h10v11H3z" /></>,
+    edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+    trash: <><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6" /></>
   }
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
-
-const initialProjects = [
-  { id: 1, name: 'Résidence Moderne', location: 'Alger · Ain Benian', status: 'Actif', value: 'DZD 12,9M', owner: 'Amina Merabet' },
-  { id: 2, name: 'Maison d’exception', location: 'Alger · Hydra', status: 'En attente', value: 'DZD 18,5M', owner: 'Khaled Benali' },
-  { id: 3, name: 'Villa de campagne', location: 'Oran · Sidi El Houari', status: 'Actif', value: 'DZD 24M', owner: 'Lina Bensaid' }
-]
 
 const navItems = [
   { label: 'Vue d’ensemble', icon: 'grid' },
@@ -38,49 +35,326 @@ const navItems = [
 ]
 
 function App() {
-  const [authenticated, setAuthenticated] = useState(() => sessionStorage.getItem('yele-admin-session') === 'true')
-  const [accessCode, setAccessCode] = useState('')
+  const [authenticated, setAuthenticated] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [loginPending, setLoginPending] = useState(false)
   const [accessError, setAccessError] = useState('')
   const [activeSection, setActiveSection] = useState('Vue d’ensemble')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [projects, setProjects] = useState(initialProjects)
+  const [projectsLoading, setProjectsLoading] = useState(false)
+  const [projectsError, setProjectsError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [projectForm, setProjectForm] = useState({ name: '', location: '', value: '', owner: '' })
+  const [editingProject, setEditingProject] = useState(null)
+  const [projectForm, setProjectForm] = useState({ name: '', location: '', value: '', owner: '', photo: '', description: '', type: 'Autre', operation: 'Vente', status: 'Disponible' })
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoError, setPhotoError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [deletingProjectId, setDeletingProjectId] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [clients, setClients] = useState([])
+  const [clientsLoading, setClientsLoading] = useState(false)
+  const [clientsError, setClientsError] = useState('')
+  const [selectedClient, setSelectedClient] = useState(null)
+  const [deletingClientId, setDeletingClientId] = useState('')
 
-  const handleLogin = event => {
-    event.preventDefault()
-    if (accessCode.trim() !== adminAccessCode) {
-      setAccessError('Le code d’accès est incorrect.')
-      return
+  useEffect(() => {
+    fetch(`${apiUrl}/api/auth/session`, { credentials: 'include' })
+      .then(response => setAuthenticated(response.ok))
+      .catch(() => setAuthenticated(false))
+      .finally(() => setAuthLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (!authenticated) return
+
+    let cancelled = false
+    setProjectsLoading(true)
+    setProjectsError('')
+
+    fetch(`${apiUrl}/api/properties`, { credentials: 'include' })
+      .then(async response => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.message || 'Impossible de charger les projets.')
+        return result
+      })
+      .then(properties => {
+        if (cancelled) return
+        setProjects(properties.map(property => ({
+          id: property._id,
+          name: property.title,
+          location: property.city,
+          status: property.status === 'Disponible' ? 'Actif' : 'Indisponible',
+          value: new Intl.NumberFormat('fr-FR').format(property.price),
+          owner: property.owner || 'Non renseigné',
+          photo: property.image,
+          description: property.description || '',
+          type: property.type || 'Autre',
+          operation: property.operation || 'Vente',
+          propertyStatus: property.status || 'Disponible',
+          price: property.price,
+        })))
+      })
+      .catch(error => {
+        if (!cancelled) setProjectsError(error.message || 'Le serveur est inaccessible.')
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [authenticated])
+
+  useEffect(() => {
+    if (!authenticated) return
+
+    let cancelled = false
+    const loadClients = async (showLoading = false) => {
+      if (showLoading) setClientsLoading(true)
+      setClientsError('')
+      try {
+        const response = await fetch(`${apiUrl}/api/contact-messages`, { credentials: 'include' })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.message || 'Impossible de charger les demandes clients.')
+        if (!cancelled) setClients(result)
+      } catch (error) {
+        if (!cancelled) setClientsError(error.message || 'Le serveur est inaccessible.')
+      } finally {
+        if (!cancelled && showLoading) setClientsLoading(false)
+      }
     }
-    sessionStorage.setItem('yele-admin-session', 'true')
-    setAuthenticated(true)
-    setAccessError('')
-  }
 
-  const logout = () => {
-    sessionStorage.removeItem('yele-admin-session')
-    setAuthenticated(false)
-    setAccessCode('')
-  }
+    loadClients(true)
+    const refreshTimer = window.setInterval(() => loadClients(), 15000)
 
-  const addProject = event => {
+    return () => {
+      cancelled = true
+      window.clearInterval(refreshTimer)
+    }
+  }, [authenticated])
+
+  const handleLogin = async event => {
     event.preventDefault()
-    const newProject = { id: Date.now(), ...projectForm, status: 'Actif' }
-    setProjects(current => [newProject, ...current])
-    setProjectForm({ name: '', location: '', value: '', owner: '' })
-    setSaved(true)
-    setTimeout(() => {
+    setLoginPending(true)
+    setAccessError('')
+
+    try {
+      const response = await fetch(`${apiUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, password }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.message || 'Connexion impossible.')
+      }
+
+      setAuthenticated(true)
+      setPassword('')
+    } catch (error) {
+      setAccessError(error.message || 'Le serveur est inaccessible.')
+    } finally {
+      setLoginPending(false)
+    }
+  }
+
+  const logout = async () => {
+    try {
+      await fetch(`${apiUrl}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch {
+      setAccessError('Le serveur est inaccessible. La session sera vérifiée à la prochaine connexion.')
+    } finally {
+      setAuthenticated(false)
+      setPassword('')
+      setUsername('')
+    }
+  }
+
+  const saveProject = async event => {
+    event.preventDefault()
+    setProjectsError('')
+
+    try {
+      const numericPrice = Number(projectForm.value.replace(/[^\d.,]/g, '').replace(',', '.'))
+      if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+        throw new Error('Saisissez une valeur numérique valide pour le prix.')
+      }
+
+      let imageUrl = /^https?:\/\//.test(projectForm.photo) ? projectForm.photo : ''
+      let imageToUpload = photoFile
+      if (!imageToUpload && projectForm.photo.startsWith('data:image/')) {
+        const legacyImage = await fetch(projectForm.photo).then(response => response.blob())
+        imageToUpload = new File([legacyImage], 'project-image', { type: legacyImage.type })
+      }
+
+      if (imageToUpload) {
+        const uploadForm = new FormData()
+        uploadForm.append('image', imageToUpload)
+        const uploadResponse = await fetch(`${apiUrl}/api/uploads/project-image`, {
+          method: 'POST',
+          credentials: 'include',
+          body: uploadForm,
+        })
+        const uploadResult = await uploadResponse.json()
+        if (!uploadResponse.ok) throw new Error(uploadResult.message || 'Impossible de téléverser la photo vers Cloudinary.')
+        imageUrl = uploadResult.image
+      }
+
+      const response = await fetch(`${apiUrl}/api/properties${editingProject ? `/${editingProject.id}` : ''}`, {
+        method: editingProject ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: projectForm.name,
+          city: projectForm.location,
+          price: numericPrice,
+          owner: projectForm.owner,
+          image: imageUrl,
+          description: projectForm.description,
+          type: projectForm.type,
+          operation: projectForm.operation,
+          status: projectForm.status,
+        }),
+      })
+      const result = response.status === 204 ? null : await response.json()
+      if (!response.ok) throw new Error(result?.message || 'Impossible d’enregistrer le projet.')
+
+      const createdProject = {
+        id: result._id,
+        name: result.title,
+        location: result.city,
+        status: result.status === 'Disponible' ? 'Actif' : 'Indisponible',
+        value: new Intl.NumberFormat('fr-FR').format(result.price),
+        owner: projectForm.owner || 'Non renseigné',
+        photo: result.image,
+        description: result.description || '',
+        type: result.type || 'Autre',
+        operation: result.operation || 'Vente',
+        propertyStatus: result.status || 'Disponible',
+        price: result.price,
+      }
+      setProjects(current => editingProject
+        ? current.map(project => project.id === editingProject.id ? createdProject : project)
+        : [createdProject, ...current])
+      setProjectForm({ name: '', location: '', value: '', owner: '', photo: '', description: '', type: 'Autre', operation: 'Vente', status: 'Disponible' })
+      setPhotoFile(null)
+      setEditingProject(null)
+      setPhotoError('')
+      setSaved(true)
+      window.setTimeout(() => {
       setSaved(false)
       setModalOpen(false)
-    }, 900)
+      }, 900)
+    } catch (error) {
+      setProjectsError(error.message || 'Le serveur est inaccessible.')
+    }
+  }
+
+  const editProject = project => {
+    setEditingProject(project)
+    setProjectForm({
+      name: project.name,
+      location: project.location,
+      value: new Intl.NumberFormat('fr-FR').format(project.price),
+      owner: project.owner === 'Non renseigné' ? '' : project.owner,
+      photo: project.photo || '',
+      description: project.description || '',
+      type: project.type || 'Autre',
+      operation: project.operation || 'Vente',
+      status: project.propertyStatus || 'Disponible',
+    })
+    setPhotoFile(null)
+    setProjectsError('')
+    setPhotoError('')
+    setModalOpen(true)
+  }
+
+  const deleteProject = async project => {
+    if (!window.confirm(`Supprimer le projet « ${project.name} » ? Cette action est irréversible.`)) return
+    setDeletingProjectId(project.id)
+    setProjectsError('')
+
+    try {
+      const response = await fetch(`${apiUrl}/api/properties/${project.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.message || 'Impossible de supprimer le projet.')
+      }
+      setProjects(current => current.filter(item => item.id !== project.id))
+    } catch (error) {
+      setProjectsError(error.message || 'Le serveur est inaccessible.')
+    } finally {
+      setDeletingProjectId('')
+    }
+  }
+
+  const openNewProject = () => {
+    setEditingProject(null)
+    setProjectForm({ name: '', location: '', value: '', owner: '', photo: '', description: '', type: 'Autre', operation: 'Vente', status: 'Disponible' })
+    setPhotoFile(null)
+    setProjectsError('')
+    setPhotoError('')
+    setModalOpen(true)
+  }
+
+  const unreadClientCount = clients.filter(message => !message.read).length
+
+  const openClientMessage = async message => {
+    setSelectedClient(message)
+    if (message.read) return
+
+    try {
+      const response = await fetch(`${apiUrl}/api/contact-messages/${message._id}/read`, {
+        method: 'PUT',
+        credentials: 'include',
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Impossible de marquer le message comme lu.')
+      setClients(current => current.map(item => item._id === message._id ? result : item))
+      setSelectedClient(result)
+    } catch (error) {
+      setClientsError(error.message || 'Le serveur est inaccessible.')
+    }
+  }
+
+  const deleteClientMessage = async message => {
+    if (!window.confirm(`Supprimer le message de ${message.name} ? Cette action est irréversible.`)) return
+    setDeletingClientId(message._id)
+    setClientsError('')
+
+    try {
+      const response = await fetch(`${apiUrl}/api/contact-messages/${message._id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.message || 'Impossible de supprimer le message client.')
+      }
+      setClients(current => current.filter(item => item._id !== message._id))
+      if (selectedClient?._id === message._id) setSelectedClient(null)
+    } catch (error) {
+      setClientsError(error.message || 'Le serveur est inaccessible.')
+    } finally {
+      setDeletingClientId('')
+    }
   }
 
   const filteredProjects = projects.filter(project =>
     `${project.name} ${project.location} ${project.owner}`.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  if (authLoading) {
+    return <main className="admin-login-shell"><section className="admin-login-panel"><p className="admin-kicker">Espace privé</p><h1>Vérification de la session…</h1></section></main>
+  }
 
   if (!authenticated) {
     return (
@@ -92,12 +366,13 @@ function App() {
           <h1>Administration</h1>
           <p className="admin-login-copy">Accédez uniquement à votre espace de gestion YELE IMMOBILIER.</p>
           <form onSubmit={handleLogin}>
-            <label htmlFor="admin-code">Code d’accès administrateur</label>
-            <div className="admin-code-input"><Icon name="lock" /><input id="admin-code" type="password" value={accessCode} onChange={event => setAccessCode(event.target.value)} placeholder="Saisissez le code" autoComplete="current-password" required /></div>
+            <label htmlFor="admin-username">Identifiant administrateur</label>
+            <div className="admin-code-input"><Icon name="lock" /><input id="admin-username" type="text" value={username} onChange={event => setUsername(event.target.value)} placeholder="Votre identifiant" autoComplete="username" required /></div>
+            <label htmlFor="admin-password">Mot de passe</label>
+            <div className="admin-code-input"><Icon name="lock" /><input id="admin-password" type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Votre mot de passe" autoComplete="current-password" required /></div>
             {accessError && <p className="admin-error">{accessError}</p>}
-            <button className="admin-primary-button" type="submit">Accéder au tableau de bord <Icon name="arrow" /></button>
+            <button className="admin-primary-button" type="submit" disabled={loginPending}>{loginPending ? 'Connexion…' : 'Accéder au tableau de bord'} <Icon name="arrow" /></button>
           </form>
-          <p className="admin-demo-note">Demo frontend : le code par défaut est <strong>ADMIN2026</strong>. La protection réelle doit être gérée par le backend.</p>
         </section>
       </main>
     )
@@ -117,7 +392,7 @@ function App() {
       <section className="admin-dashboard">
         <header className="admin-topbar">
           <div className="admin-topbar-title"><button className="admin-menu-button" type="button" aria-label="Ouvrir le menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><span /><span /><span /></button><div><p>GESTION / {activeSection.toUpperCase()}</p><h1>{activeSection}</h1></div></div>
-          <div className="admin-topbar-actions"><button className="admin-icon-button" type="button" aria-label="Notifications"><Icon name="bell" /><i /></button><div className="admin-user"><span>YM</span><div><strong>Yele Manager</strong><small>Administrateur</small></div></div><button className="admin-logout" type="button" onClick={logout}>Déconnexion</button></div>
+          <div className="admin-topbar-actions"><button className="admin-icon-button" type="button" aria-label={unreadClientCount ? `${unreadClientCount} nouveau(x) message(s) client` : 'Aucun nouveau message client'} title={unreadClientCount ? `${unreadClientCount} nouveau(x) message(s)` : 'Aucun nouveau message'} onClick={() => setActiveSection('Clients')}><Icon name="bell" />{unreadClientCount > 0 && <span className="admin-notification-count">{unreadClientCount > 99 ? '99+' : unreadClientCount}</span>}</button><div className="admin-user"><span>YM</span><div><strong>Yele Manager</strong><small>Administrateur</small></div></div><button className="admin-logout" type="button" onClick={logout}>Déconnexion</button></div>
         </header>
 
         <div className="admin-content">
@@ -137,32 +412,75 @@ function App() {
 
           {activeSection === 'Mes projets' && (
             <article className="admin-projects-card">
-              <div className="admin-panel-heading"><div><small>Portefeuille</small><h2>Projets</h2></div><button className="admin-primary-button compact" type="button" onClick={() => setModalOpen(true)}><Icon name="plus" /> Ajouter un projet</button></div>
+              <div className="admin-panel-heading"><div><small>Portefeuille</small><h2>Projets</h2></div><button className="admin-primary-button compact" type="button" onClick={openNewProject}><Icon name="plus" /> Ajouter un projet</button></div>
               <div className="admin-search"><Icon name="search" /><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Rechercher un projet..." aria-label="Rechercher un projet" /></div>
+              {projectsError && <p className="admin-error" role="alert">{projectsError}</p>}
               <div className="admin-table-wrap">
                 <table>
-                  <thead><tr><th>Projet</th><th>Localisation</th><th>Propriétaire</th><th>Statut</th><th>Valeur</th></tr></thead>
-                  <tbody>{filteredProjects.map(project => <tr key={project.id}><td><strong>{project.name}</strong></td><td>{project.location}</td><td>{project.owner}</td><td><span className={project.status === 'Actif' ? 'status-active' : 'status-pending'}>{project.status}</span></td><td>{project.value}</td></tr>)}</tbody>
+                  <thead><tr><th>Projet</th><th>Localisation</th><th>Propriétaire</th><th>Statut</th><th>Valeur</th><th>Actions</th></tr></thead>
+                  <tbody>{!projectsLoading && filteredProjects.map(project => <tr key={project.id}><td><div className="admin-project-name">{project.photo && <img src={project.photo} alt="" />}<strong>{project.name}</strong></div></td><td>{project.location}</td><td>{project.owner}</td><td><span className={project.status === 'Actif' ? 'status-active' : 'status-pending'}>{project.status}</span></td><td>{project.value}</td><td><div className="admin-row-actions"><button type="button" aria-label={`Modifier ${project.name}`} title="Modifier" onClick={() => editProject(project)}><Icon name="edit" size={17} /></button><button type="button" className="danger" aria-label={`Supprimer ${project.name}`} title="Supprimer" disabled={deletingProjectId === project.id} onClick={() => deleteProject(project)}><Icon name="trash" size={17} /></button></div></td></tr>)}</tbody>
                 </table>
+                {projectsLoading && <p role="status">Chargement des projets…</p>}
+                {!projectsLoading && filteredProjects.length === 0 && <p>Aucun projet enregistré.</p>}
               </div>
             </article>
           )}
 
-          {activeSection === 'Clients' && <article className="admin-placeholder-card"><span><Icon name="users" /></span><h2>Clients</h2><p>Le module clients sera relié à la base de données dans la prochaine étape.</p></article>}
+          {activeSection === 'Clients' && (
+            <article className="admin-projects-card">
+              <div className="admin-panel-heading"><div><small>Demandes</small><h2>Clients</h2></div></div>
+              {clientsError && <p className="admin-error" role="alert">{clientsError}</p>}
+              <div className="admin-table-wrap">
+                <table>
+                  <thead><tr><th>Client</th><th>Email</th><th>Objet</th><th>Téléphone</th><th>Date</th><th>Message</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {!clientsLoading && clients.map(message => (
+                      <tr key={message._id}>
+                        <td><strong>{message.name}</strong>{!message.read && <span className="admin-unread-label">Nouveau</span>}</td>
+                        <td>{message.email}</td>
+                        <td>{message.subject}</td>
+                        <td>{message.phone || '—'}</td>
+                        <td>{new Date(message.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                        <td><button type="button" className="admin-read-message" onClick={() => openClientMessage(message)}><Icon name="mail" size={16} /> Lire</button></td>
+                        <td><button type="button" className="admin-delete-message" aria-label={`Supprimer le message de ${message.name}`} title="Supprimer le message" disabled={deletingClientId === message._id} onClick={() => deleteClientMessage(message)}><Icon name="trash" size={17} /></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {clientsLoading && <p role="status">Chargement des demandes…</p>}
+                {!clientsLoading && clients.length === 0 && <p>Aucune demande client pour le moment.</p>}
+              </div>
+            </article>
+          )}
           {activeSection === 'Finances' && <article className="admin-placeholder-card"><span><Icon name="dollar" /></span><h2>Finances</h2><p>Les rapports financiers seront ajoutés avec la connexion backend.</p></article>}
         </div>
       </section>
 
       {modalOpen && (
         <div className="admin-modal-backdrop" onMouseDown={() => setModalOpen(false)}>
-          <form className="admin-modal" onSubmit={addProject} onMouseDown={event => event.stopPropagation()}>
+          <form className="admin-modal" onSubmit={saveProject} onMouseDown={event => event.stopPropagation()}>
             <button type="button" className="admin-modal-close" onClick={() => setModalOpen(false)} aria-label="Fermer"><Icon name="close" /></button>
-            <p className="admin-kicker">Nouveau projet</p><h2>Ajouter un projet</h2><p>Les données sont stockées uniquement dans l’état frontend de cette session.</p>
+            <p className="admin-kicker">{editingProject ? 'Modifier le projet' : 'Nouveau projet'}</p><h2>{editingProject ? 'Mettre à jour le projet' : 'Ajouter un projet'}</h2><p>Les informations seront synchronisées avec le site public.</p>
             <label>Nom du projet<input required value={projectForm.name} onChange={event => setProjectForm({ ...projectForm, name: event.target.value })} placeholder="Ex. Appartement Résidence" /></label>
+            <div className="admin-photo-field"><span>Photo du projet</span><label className="admin-photo-picker" htmlFor="project-photo"><Icon name="folder" />Choisir une image<input id="project-photo" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={event => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) { setPhotoError('La photo doit faire moins de 5 Mo.'); event.target.value = ''; return } if (!file.type.startsWith('image/')) { setPhotoError('Le fichier sélectionné doit être une image.'); event.target.value = ''; return } setPhotoFile(file); setProjectForm(current => ({ ...current, photo: URL.createObjectURL(file) })); setPhotoError('') }} /></label>{photoError && <p className="admin-error">{photoError}</p>}{projectForm.photo && <div className="admin-photo-preview"><img src={projectForm.photo} alt="Aperçu du projet" />{photoFile && <small>La photo sera envoyée vers Cloudinary à l’enregistrement.</small>}<button type="button" onClick={() => { setPhotoFile(null); setProjectForm(current => ({ ...current, photo: '' })); const input = document.getElementById('project-photo'); if (input) input.value = '' }}>Supprimer la photo</button></div>}</div>
             <label>Localisation<input required value={projectForm.location} onChange={event => setProjectForm({ ...projectForm, location: event.target.value })} placeholder="Ville, quartier" /></label>
             <div className="admin-form-row"><label>Valeur estimée<input required value={projectForm.value} onChange={event => setProjectForm({ ...projectForm, value: event.target.value })} placeholder="DZD 00 000 000" /></label><label>Propriétaire<input required value={projectForm.owner} onChange={event => setProjectForm({ ...projectForm, owner: event.target.value })} placeholder="Nom complet" /></label></div>
-            <button className="admin-primary-button" type="submit">{saved ? <><Icon name="check" /> Projet ajouté</> : <><Icon name="plus" /> Enregistrer le projet</>}</button>
+            <div className="admin-form-row"><label>Type de bien<select value={projectForm.type} onChange={event => setProjectForm({ ...projectForm, type: event.target.value })}><option>Maison</option><option>Appartement</option><option>Villa</option><option>Terrain</option><option>Bureau</option><option>Autre</option></select></label><label>Opération<select value={projectForm.operation} onChange={event => setProjectForm({ ...projectForm, operation: event.target.value })}><option>Vente</option><option>Location</option></select></label></div>
+            <div className="admin-form-row"><label>Disponibilité<select value={projectForm.status} onChange={event => setProjectForm({ ...projectForm, status: event.target.value })}><option>Disponible</option><option>Indisponible</option></select></label><label>Description<textarea rows="3" value={projectForm.description} onChange={event => setProjectForm({ ...projectForm, description: event.target.value })} placeholder="Description du bien" /></label></div>
+            {projectsError && <p className="admin-error" role="alert">{projectsError}</p>}
+            <button className="admin-primary-button" type="submit" disabled={saved}>{saved ? <><Icon name="check" /> Projet enregistré</> : <><Icon name={editingProject ? 'check' : 'plus'} /> {editingProject ? 'Enregistrer les modifications' : 'Enregistrer le projet'}</>}</button>
           </form>
+        </div>
+      )}
+      {selectedClient && (
+        <div className="admin-modal-backdrop" onMouseDown={() => setSelectedClient(null)}>
+          <section className="admin-modal admin-message-modal" role="dialog" aria-modal="true" aria-labelledby="client-message-title" onMouseDown={event => event.stopPropagation()}>
+            <button type="button" className="admin-modal-close" onClick={() => setSelectedClient(null)} aria-label="Fermer"><Icon name="close" /></button>
+            <p className="admin-kicker">Message client</p><h2 id="client-message-title">{selectedClient.subject}</h2>
+            <div className="admin-message-meta"><strong>{selectedClient.name}</strong><a href={`mailto:${selectedClient.email}`}>{selectedClient.email}</a>{selectedClient.phone && <a href={`tel:${selectedClient.phone}`}>{selectedClient.phone}</a>}<time>{new Date(selectedClient.createdAt).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })}</time></div>
+            <p className="admin-message-body">{selectedClient.message}</p>
+            <a className="admin-primary-button admin-reply-button" href={`mailto:${selectedClient.email}?subject=${encodeURIComponent(`Re: ${selectedClient.subject}`)}`}><Icon name="mail" /> Répondre par e-mail</a>
+          </section>
         </div>
       )}
     </main>

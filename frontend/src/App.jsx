@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import logo from './assets/logo.jpg'
 import './App.css'
+
+const apiUrl = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '')).replace(/\/$/, '')
 
 const Icon = ({ name, size = 20 }) => {
   const paths = {
@@ -26,12 +28,6 @@ const Icon = ({ name, size = 20 }) => {
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
 
-const properties = [
-  { title: 'Maison d’exception', location: 'Algiers · Hydra', price: 'DZD 18 500 000', type: 'Maison', image: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=85' },
-  { title: 'Résidence moderne', location: 'Algiers · Ain Benian', price: 'DZD 12 900 000', type: 'Appartement', image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c251c31?auto=format&fit=crop&w=1200&q=85' },
-  { title: 'Villa de campagne', location: 'Oran · Sidi El Houari', price: 'DZD 24 000 000', type: 'Villa', image: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=1200&q=85' }
-]
-
 const services = [
   { icon: 'home', title: 'Acheter', text: 'Acquisition, vente et location de biens sélectionnés avec une expertise humaine.' },
   { icon: 'key', title: 'Financement', text: 'Une accompagnement financier adapté, du calcul à la négociation de votre prêt.' },
@@ -44,13 +40,56 @@ function App() {
   const [search, setSearch] = useState('')
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', subject: '', message: '' })
   const [contactSent, setContactSent] = useState(false)
+  const [properties, setProperties] = useState([])
+  const [propertiesLoading, setPropertiesLoading] = useState(true)
+  const [propertiesError, setPropertiesError] = useState('')
+  const [contactError, setContactError] = useState('')
 
-  const filtered = properties.filter(item => `${item.title} ${item.location} ${item.type}`.toLowerCase().includes(search.toLowerCase()))
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(`${apiUrl}/api/properties`)
+      .then(async response => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.message || 'Impossible de charger les biens.')
+        return result
+      })
+      .then(data => {
+        if (!cancelled) setProperties(data)
+      })
+      .catch(error => {
+        if (!cancelled) setPropertiesError(error.message || 'Le serveur est inaccessible.')
+      })
+      .finally(() => {
+        if (!cancelled) setPropertiesLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const filtered = properties.filter(item => `${item.title || ''} ${item.city || ''} ${item.type || ''}`.toLowerCase().includes(search.toLowerCase()))
 
   const updateContactForm = event => setContactForm({ ...contactForm, [event.target.name]: event.target.value })
-  const submitContactForm = event => {
+  const submitContactForm = async event => {
     event.preventDefault()
-    setContactSent(true)
+    setContactError('')
+
+    try {
+      const response = await fetch(`${apiUrl}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactForm),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Impossible d’envoyer votre demande.')
+
+      setContactSent(true)
+      setContactForm({ name: '', email: '', phone: '', subject: '', message: '' })
+    } catch (error) {
+      setContactError(error.message || 'Une erreur est survenue lors de l’envoi.')
+    }
   }
 
   return (
@@ -109,16 +148,21 @@ function App() {
             <div className="search-box"><Icon name="search" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un bien..." aria-label="Rechercher un bien" /></div>
             <span>{filtered.length} biens disponibles</span>
           </div>
-          <div className="property-grid">
-            {filtered.map((item, index) => (
-              <article className="property-card" key={item.title}>
-                <div className="property-image"><img src={item.image} alt={item.title} /><span>{item.type}</span><button type="button" aria-label={`Préférer ${item.title}`}>♡</button></div>
-                <div className="property-info"><div><h3>{item.title}</h3><p><Icon name="location" size={15} /> {item.location}</p></div><strong>{item.price}</strong></div>
-                <a href="#contact">En savoir plus <Icon name="arrow" size={16} /></a>
-              </article>
-            ))}
-          </div>
-          {filtered.length === 0 && <div className="empty-state">Aucun bien ne correspond à votre recherche.</div>}
+          {propertiesError && <p className="admin-error" role="alert">{propertiesError}</p>}
+          {!propertiesLoading ? (
+            <div className="property-grid">
+              {filtered.map((item) => (
+                <article className="property-card" key={item._id || item.title}>
+                  <div className="property-image"><img src={item.image || 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=85'} alt={item.title} /><span>{item.type}</span><button type="button" aria-label={`Préférer ${item.title}`}>♡</button></div>
+                  <div className="property-info"><div><h3>{item.title}</h3><p><Icon name="location" size={15} /> {item.city}</p></div><strong>{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', maximumFractionDigits: 0 }).format(item.price)}</strong></div>
+                  <a href="#contact">En savoir plus <Icon name="arrow" size={16} /></a>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">Chargement des biens…</div>
+          )}
+          {!propertiesLoading && filtered.length === 0 && <div className="empty-state">Aucun bien ne correspond à votre recherche.</div>}
         </section>
 
         <section className="services-section" id="services">
@@ -155,6 +199,7 @@ function App() {
                 <div className="form-row"><label>Nom complet<input type="text" name="name" value={contactForm.name} onChange={updateContactForm} placeholder="Votre nom" required /></label><label>Adresse e-mail<input type="email" name="email" value={contactForm.email} onChange={updateContactForm} placeholder="vous@email.dz" required /></label></div>
                 <div className="form-row"><label>Numéro de téléphone<input type="tel" name="phone" value={contactForm.phone} onChange={updateContactForm} placeholder="+225 00 00 00 00" /></label><label>Objet<input type="text" name="subject" value={contactForm.subject} onChange={updateContactForm} placeholder="Ex. Achat d’un bien" required /></label></div>
                 <label>Votre message<textarea name="message" value={contactForm.message} onChange={updateContactForm} placeholder="Parlez-nous de votre projet..." rows="5" required /></label>
+                {contactError && <p className="admin-error" role="alert">{contactError}</p>}
                 <button className="button button-dark form-submit" type="submit">Envoyer ma demande <Icon name="arrow" /></button>
               </form>
             )}
